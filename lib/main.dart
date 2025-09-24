@@ -15,7 +15,7 @@ void main() {
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(home: NFCReaderScreen());
+    return MaterialApp(home: FlicaReaderScreen());
   }
 }
 
@@ -79,7 +79,7 @@ class _FlicaReaderScreen extends State<FlicaReaderScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('NFC Reader')),
+      appBar: AppBar(title: const Text('NFC Felica')),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
