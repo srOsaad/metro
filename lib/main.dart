@@ -65,10 +65,15 @@ class _FlicaReaderScreen extends State<FlicaReaderScreen> {
             _nfcData.text += felica.idm.toString();
             _nfcData.text += felica.systemCode.toString();
             _nfcData.text += felica.hashCode.toString();
-            final pollingResponse = await felica.polling(
-              systemCode: felica.systemCode,
-              requestCode: FeliCaPollingRequestCode.communicationPerformance,
-              timeSlot: FeliCaPollingTimeSlot.max16,
+            int a = 0x220F;
+            Uint8List bytes = Uint8List(2)
+              ..buffer.asByteData().setUint16(0, a, Endian.big);
+
+  // Wrap each byte into a Uint8List and add to List
+            List<Uint8List> byteList = bytes.map((b) => Uint8List.fromList([b])).toList();
+            final pollingResponse = await felica.readWithoutEncryption(
+              serviceCodeList: NFCData.getServiceCodeList(),
+              blockList: NFCData.getBlockList(),
             );
             _nfcData.text += pollingResponse.toString();
           });
