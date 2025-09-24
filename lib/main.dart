@@ -62,6 +62,10 @@ class _FlicaReaderScreen extends State<FlicaReaderScreen> {
           }
           setState(() {
             _nfcData.text += felica.toString();
+            _nfcData.text += felica.idm.toString();
+            _nfcData.text += felica.systemCode.toString();
+            _nfcData.text += felica.hashCode.toString();
+            //_nfcData.text += felica.
           });
         } catch (e) {
           setState(() {
