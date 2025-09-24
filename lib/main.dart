@@ -60,12 +60,17 @@ class _FlicaReaderScreen extends State<FlicaReaderScreen> {
             print('Tha tag is not compatible with FeliCa.');
             return;
           }
-          setState(() {
+          setState(() async {
             _nfcData.text += felica.toString();
             _nfcData.text += felica.idm.toString();
             _nfcData.text += felica.systemCode.toString();
             _nfcData.text += felica.hashCode.toString();
-            //_nfcData.text += felica.
+            final pollingResponse = await felica.polling(
+              systemCode: felica.systemCode,
+              requestCode: FeliCaPollingRequestCode.communicationPerformance,
+              timeSlot: FeliCaPollingTimeSlot.max16,
+            );
+            _nfcData.text += pollingResponse.toString();
           });
         } catch (e) {
           setState(() {
