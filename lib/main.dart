@@ -1,247 +1,87 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:nfc_manager/nfc_manager.dart';
-import 'package:metro/nfc_manager_felica/nfc_manager_felica.dart';
-import 'package:nfc_manager/nfc_manager_android.dart';
+import 'package:metro/nfc_manager_felica/nfc_manager_felica.dart'; // your file
 
-//import 'package:share_plus/share_plus.dart';
-import 'nfcData/nfcData.dart';
-
-void main() {
-  runApp(MyApp());
-}
-
-class MyApp extends StatelessWidget {
+class FeliCaReaderApp extends StatefulWidget {
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(home: FlicaReaderScreen());
-  }
+  State<FeliCaReaderApp> createState() => _FeliCaReaderAppState();
 }
 
-class FlicaReaderScreen extends StatefulWidget {
-  @override
-  _FlicaReaderScreen createState() => _FlicaReaderScreen();
-}
+class _FeliCaReaderAppState extends State<FeliCaReaderApp> {
+  String _log = "Tap a FeliCa card";
 
-class _FlicaReaderScreen extends State<FlicaReaderScreen> {
-  TextEditingController _nfcData = TextEditingController();
-  bool _isScanning = false;
-  bool _useId = false;
-
-  void _startNFCReading() async {
-    bool isAvailable = await NfcManager.instance.isAvailable();
-    if (!isAvailable) {
-      setState(() {
-        _nfcData.text += 'NFC is not available on this device.\n';
-      });
-      return;
-    }
-
-    if (_isScanning) {
-      _nfcData.text += ("NFC session is already active.\n");
-      return;
-    }
-
-    setState(() {
-      _isScanning = true;
-    });
-
+  void _startNfcSession() {
     NfcManager.instance.startSession(
-      pollingOptions: {
-        NfcPollingOption.iso14443,
-        NfcPollingOption.iso18092,
-        NfcPollingOption.iso15693,
-      },
-      onDiscovered:  (NfcTag tag) async {
-        try {
-          final felica = FeliCa.from(tag);
-          if (felica == null) {
-            print('Tha tag is not compatible with FeliCa.');
-            return;
-          }
-          setState(() async {
-            _nfcData.text += felica.toString();
-            _nfcData.text += felica.idm.toString();
-            _nfcData.text += felica.systemCode.toString();
-            _nfcData.text += felica.hashCode.toString();
-            int a = 0x220F;
-            Uint8List bytes = Uint8List(2)
-              ..buffer.asByteData().setUint16(0, a, Endian.big);
-
-  // Wrap each byte into a Uint8List and add to List
-            List<Uint8List> byteList = bytes.map((b) => Uint8List.fromList([b])).toList();
-            final pollingResponse = await felica.readWithoutEncryption(
-              serviceCodeList: NFCData.getServiceCodeList(),
-              blockList: NFCData.getBlockList(),
-            );
-            _nfcData.text += pollingResponse.toString();
-          });
-        } catch (e) {
-          setState(() {
-            _nfcData.text += "Error processing tag: $e";
-          });
-        } finally {
-          NfcManager.instance.stopSession();
-          setState(() {
-            _isScanning = false;
-          });
+      pollingOptions: <NfcPollingOption>{NfcPollingOption.iso18092},
+      onDiscovered: (tag) async {
+      try {
+        final felica = FeliCa.from(tag);
+        if (felica == null) {
+          setState(() => _log = "Not a FeliCa tag");
+          return;
         }
-    },);
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Felica')),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(minLines: 1, maxLines: 10, controller: _nfcData),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: _nfcData.text));
-              },
-              child: const Icon(Icons.copy),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _startNFCReading,
-              child: const Text('Start NFC Reader'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+        // Get IDm
+        final idm = felica.idm;
+        final idmHex = idm.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+        setState(() => _log = "Card detected\nIDm: $idmHex");
 
-class NFCReaderScreen extends StatefulWidget {
-  @override
-  _NFCReaderScreenState createState() => _NFCReaderScreenState();
-}
+        // Service code (0x220F little-endian → [0x0F, 0x22])
+        final serviceCodeList = [Uint8List.fromList([0x0F, 0x22])];
 
-class _NFCReaderScreenState extends State<NFCReaderScreen> {
-  TextEditingController _nfcData = TextEditingController();
-  bool _isScanning = false;
-  bool _useId = false;
+        // Block list (10 blocks starting from 0 → [0x80, blockNo])
+        final blockList = List.generate(
+          10,
+          (i) => Uint8List.fromList([0x80, i]),
+        );
 
-  Uint8List stringToUnit8List(String str) {
-    return Uint8List.fromList(
-      str.split(',').map((e) => int.parse(e.trim())).toList(),
-    );
-  }
+        // Read without encryption
+        final response = await felica.readWithoutEncryption(
+          serviceCodeList: serviceCodeList,
+          blockList: blockList,
+        );
 
-  void processNfcData(Map<String, dynamic> data) {
-    if (data.containsKey('nfcf')) {
-      final nfcfData = data['nfcf'] as Map<String, dynamic>;
+        final buffer = StringBuffer();
+        buffer.writeln("StatusFlag1: ${response.statusFlag1}");
+        buffer.writeln("StatusFlag2: ${response.statusFlag2}");
 
-      List<int> identifier = List<int>.from(nfcfData['identifier']);
-      List<int> manufacturer = List<int>.from(nfcfData['manufacturer']);
-      int maxTransceiveLength = nfcfData['maxTransceiveLength'];
-      List<int> systemCode = List<int>.from(nfcfData['systemCode']);
-      int timeout = nfcfData['timeout'];
+        for (int i = 0; i < response.blockData.length; i++) {
+          final block = response.blockData[i];
+          final hex = block.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+          buffer.writeln("Block $i: $hex");
+        }
 
-      print('Identifier: $identifier');
-      print('Manufacturer: $manufacturer');
-      print('Max Transceive Length: $maxTransceiveLength');
-      print('System Code: $systemCode');
-      print('Timeout: $timeout');
-    } else {
-      print('No NFCF data found.');
-    }
-  }
-
-  void _startNFCReading() async {
-    bool isAvailable = await NfcManager.instance.isAvailable();
-    if (!isAvailable) {
-      setState(() {
-        _nfcData.text += 'NFC is not available on this device.\n';
-      });
-      return;
-    }
-
-    if (_isScanning) {
-      _nfcData.text += ("NFC session is already active.\n");
-      return;
-    }
-
-    setState(() {
-      _isScanning = true;
+        setState(() => _log += "\n\n${buffer.toString()}");
+      } catch (e) {
+        setState(() => _log = "Error: $e");
+      } finally {
+        NfcManager.instance.stopSession();
+      }
     });
-
-    NfcManager.instance.startSession(
-      pollingOptions: {
-        NfcPollingOption.iso14443,
-        NfcPollingOption.iso18092,
-        NfcPollingOption.iso15693,
-      },
-      onDiscovered: (NfcTag tag) async {
-        try {
-          final nfcTag = NfcFAndroid.from(tag);
-          if (nfcTag != null) {
-            var response = "";
-            var response2 = "";
-            /*final response = await nfcTag.transceive(
-              //NFCData.generateReadCommand(nfcTag.identifier),
-            );
-            final response2 = await nfcTag.transceive(
-              //data: NFCData.generateReadCommand(nfcTag.identifier,
-                //  startBlockNumber: 10),
-            );*/
-
-            setState(() {
-              if (response.isEmpty) {
-                _nfcData.text += "didn't got any response \n";
-              } else {
-                _nfcData.text += "Got response1: ${response.toString()}\n";
-              }
-
-              if (response2.isEmpty) {
-                _nfcData.text += "didn't got any response 2\n";
-              } else {
-                _nfcData.text += "Got response2: ${response2.toString()}\n";
-              }
-            });
-          }
-        } catch (e) {
-          setState(() {
-            _nfcData.text += "Error processing tag: $e";
-          });
-        } finally {
-          NfcManager.instance.stopSession();
-          setState(() {
-            _isScanning = false;
-          });
-        }
-      },
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('NFC Reader')),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(minLines: 1, maxLines: 10, controller: _nfcData),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: _nfcData.text));
-              },
-              child: const Icon(Icons.copy),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _startNFCReading,
-              child: const Text('Start NFC Reader'),
-            ),
-          ],
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: Text("FeliCa Reader")),
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              ElevatedButton(
+                onPressed: _startNfcSession,
+                child: Text("Scan FeliCa Card"),
+              ),
+              SizedBox(height: 20),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Text(_log),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
