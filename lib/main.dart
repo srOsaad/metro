@@ -93,7 +93,7 @@ class _FlicaReaderScreen extends State<FlicaReaderScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('NFC Felica')),
+      appBar: AppBar(title: const Text('Felica')),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
